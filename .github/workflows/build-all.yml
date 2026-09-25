@@ -1,0 +1,47 @@
+name: Build CRZEFI and EFIClient
+
+on: [push, workflow_dispatch]
+
+jobs:
+  # 1. Крок збірки UEFI Драйвера на Linux
+  build-efi-driver:
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    - name: Install gnu-efi
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y gnu-efi build-essential
+
+    - name: Compile EFI Driver
+      run: |
+        cd CRZEFI
+        make
+
+    - name: Save EFI Artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: crzefi-driver
+        path: CRZEFI/memory.efi
+
+  # 2. Крок збірки Windows Клієнта на Windows Server з Visual Studio
+  build-windows-client:
+    runs-on: windows-latest
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    - name: Add MSBuild to PATH
+      uses: microsoft/setup-msbuild@v2
+
+    - name: Build Solution
+      run: |
+        msbuild EFI_Driver_Access.sln /p:Configuration=Release /p:Platform=x64
+
+    - name: Save EXE Artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: eficlient-windows
+        path: x64/Release/EFIClient.exe
