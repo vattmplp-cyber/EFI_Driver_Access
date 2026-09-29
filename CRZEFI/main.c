@@ -46,6 +46,9 @@ typedef int (MicrosoftCallingType *MmCopyVirtualMemory)(
 	void* ReturnSize
 );
 
+// ДОДАЙТЕ ЦЕЙ РЯДОК:
+typedef void (MicrosoftCallingType *ObDereferenceObject)(void* Object);
+
 // Our protocol GUID (should be different for every driver)
 static const EFI_GUID ProtocolGuid
 	= { 0x2f84893e, 0xfd5e, 0x2038, {0x8d, 0x9e, 0x20, 0xa7, 0xaf, 0x9c, 0x32, 0xf1} };
@@ -70,6 +73,9 @@ static BOOLEAN Runtime = FALSE;
 static PsLookupProcessByProcessId GetProcessByPid = (PsLookupProcessByProcessId)0;
 static PsGetProcessSectionBaseAddress GetBaseAddress = (PsGetProcessSectionBaseAddress)0;
 static MmCopyVirtualMemory MCopyVirtualMemory = (MmCopyVirtualMemory)0;
+
+// ДОДАЙТЕ ЦЕЙ РЯДОК:
+static ObDereferenceObject DereferenceObject = (ObDereferenceObject)0;
 
 // Function that actually performs the r/w
 EFI_STATUS
@@ -110,14 +116,19 @@ RunCommand(MemoryCommand* cmd)
 			
 			status = GetProcessByPid(dest_process_id, &DstProc);
 			if (status < 0){
+				// ДОДАНО: якщо другий процес не знайшовся, звільняємо перший перед виходом
+				if (SrcProc && DereferenceObject) DereferenceObject(SrcProc);
 				*(ptr64*)resultAddr = status;
 				return EFI_SUCCESS;
 			}
 				
-			
 			*(ptr64*)resultAddr = MCopyVirtualMemory(SrcProc, src_address, DstProc, dest_address, size, 1, &size_out);
 			
-			//NOTE: dereference SrcProc and DstProc or will be a big leak on reference count
+			// ДОДАНО: автоматично звільняємо обидва процеси після роботи
+			if (DereferenceObject) {
+				if (SrcProc) DereferenceObject(SrcProc);
+				if (DstProc) DereferenceObject(DstProc);
+			}
 		}
 		return EFI_SUCCESS;
 	}
@@ -127,7 +138,11 @@ RunCommand(MemoryCommand* cmd)
 		GetProcessByPid = (PsLookupProcessByProcessId)cmd->data[0];
 		GetBaseAddress = (PsGetProcessSectionBaseAddress)cmd->data[1];
 		MCopyVirtualMemory = (MmCopyVirtualMemory)cmd->data[2];
-		ptr64 resultAddr = cmd->data[3];
+		
+		// ДОДАЙТЕ ЦІ ДВА РЯДКИ:
+		DereferenceObject = (ObDereferenceObject)cmd->data[3];
+		ptr64 resultAddr = cmd->data[4]; // Змістилось з data[3] на data[4]
+		
 		*(ptr64*)resultAddr = 1;
 		return EFI_SUCCESS;
 	}
@@ -148,8 +163,13 @@ RunCommand(MemoryCommand* cmd)
 		//Find process Base Address
 		*(ptr64*)resultAddr = (ptr64)GetBaseAddress(ProcessPtr); //Return Base Address
 		
-		//NOTE: dereference ProcessPtr or will be a big leak on reference count
+		// ДОДАНО: автоматично звільняємо процес
+		if (ProcessPtr && DereferenceObject) {
+			DereferenceObject(ProcessPtr);
+		}
+		
 		return EFI_SUCCESS;
+	}eturn EFI_SUCCESS;
 	}
 
 	// Invalid command
