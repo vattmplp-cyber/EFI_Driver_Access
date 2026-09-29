@@ -169,7 +169,6 @@ RunCommand(MemoryCommand* cmd)
 		}
 		
 		return EFI_SUCCESS;
-	}eturn EFI_SUCCESS;
 	}
 
 	// Invalid command
